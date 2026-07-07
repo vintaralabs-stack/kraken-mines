@@ -11,10 +11,11 @@ export const COUNT_UP_MAX_MS = 4500;
 
 export const SEGMENT_ANGLE = 360 / WHEEL_SEGMENT_COUNT;
 
+/** Wheel payout multipliers — separate from Mines RTP */
 export const WHEEL_PAYOUTS = {
-  red: 2,
-  black: 2,
-  green: 15,
+  red: 2.05,
+  black: 2.05,
+  green: 16,
 } as const;
 
 /** Segment fills — black is dark but visible, not a transparent gap */
@@ -24,22 +25,42 @@ export const WHEEL_SEGMENT_COLORS: Record<WheelColor, string> = {
   green: "#1a9e4a",
 };
 
-/** Fixed 100-segment roulette layout: 47 red, 47 black, 6 green — one array for render + logic */
-export const WHEEL_SEGMENTS: WheelColor[] = buildWheelSegments();
+/** Classic high-volatility wheel distribution (must sum to WHEEL_SEGMENT_COUNT) */
+export const WHEEL_SEGMENT_COUNTS = {
+  red: 47,
+  black: 47,
+  green: 6,
+} as const;
 
-const GREEN_INDEXES = [0, 16, 33, 50, 66, 83];
+/** Evenly space `slotCount` green slices around the wheel */
+function computeEvenlySpacedIndexes(
+  slotCount: number,
+  total: number
+): number[] {
+  return Array.from({ length: slotCount }, (_, i) =>
+    Math.floor((i * total) / slotCount)
+  );
+}
 
 function buildWheelSegments(): WheelColor[] {
-  const segments: WheelColor[] = new Array(WHEEL_SEGMENT_COUNT);
-  const greenSet = new Set(GREEN_INDEXES);
+  const { red, black, green } = WHEEL_SEGMENT_COUNTS;
 
-  for (const idx of GREEN_INDEXES) {
+  if (red + black + green !== WHEEL_SEGMENT_COUNT) {
+    throw new Error("Wheel segment counts must sum to WHEEL_SEGMENT_COUNT");
+  }
+
+  const segments: WheelColor[] = new Array(WHEEL_SEGMENT_COUNT);
+  const greenIndexes = new Set(
+    computeEvenlySpacedIndexes(green, WHEEL_SEGMENT_COUNT)
+  );
+
+  for (const idx of greenIndexes) {
     segments[idx] = "green";
   }
 
   let useRed = true;
   for (let i = 0; i < WHEEL_SEGMENT_COUNT; i++) {
-    if (greenSet.has(i)) continue;
+    if (greenIndexes.has(i)) continue;
     segments[i] = useRed ? "red" : "black";
     useRed = !useRed;
   }
@@ -47,9 +68,24 @@ function buildWheelSegments(): WheelColor[] {
   return segments;
 }
 
+/** Fixed 100-segment roulette layout: 47 red, 47 black, 6 green — one array for render + logic */
+export const WHEEL_SEGMENTS: WheelColor[] = buildWheelSegments();
+
 export interface WheelSegment {
   index: number;
   color: WheelColor;
+}
+
+/**
+ * Deterministic gamble result derived only from finalSegment + player choice.
+ * finalSegment is the single source of truth for visual landing and result logic.
+ */
+export interface GambleOutcome {
+  finalSegment: WheelSegment;
+  landedColor: WheelColor;
+  won: boolean;
+  payout: number;
+  payoutMultiplier: number;
 }
 
 /**
@@ -66,14 +102,36 @@ export function selectFinalSegment(): WheelSegment {
   };
 }
 
-/** Center of segment index in degrees clockwise from 12 o'clock (matches SVG layout). */
+/**
+ * Resolves win/loss and payout from the chosen segment — no separate color inference.
+ */
+export function resolveGambleOutcome(
+  finalSegment: WheelSegment,
+  selectedColor: WheelChoice,
+  gambleAmount: number
+): GambleOutcome {
+  const landedColor = finalSegment.color;
+  const won = selectedColor === landedColor;
+  const payout = won
+    ? calculateGambleWinAmountForLanded(gambleAmount, landedColor)
+    : 0;
+  const payoutMultiplier = won ? getPayoutMultiplier(landedColor) : 0;
+
+  return {
+    finalSegment,
+    landedColor,
+    won,
+    payout,
+    payoutMultiplier,
+  };
+}
+
 export function getSegmentCenterAngle(segmentIndex: number): number {
   return segmentIndex * SEGMENT_ANGLE + SEGMENT_ANGLE / 2;
 }
 
 /**
  * Rotate wheel clockwise so finalSegment center sits under the fixed top pointer.
- * SVG segments start at -90° (top); center of segment i is (i + 0.5) * segmentAngle from top.
  */
 export function getRotationToSegment(
   currentRotation: number,
@@ -100,7 +158,13 @@ export function calculateGambleWinAmount(
   gambleAmount: number
 ): number {
   if (!isGambleWin(selectedColor, landedColor)) return 0;
+  return calculateGambleWinAmountForLanded(gambleAmount, landedColor);
+}
 
+function calculateGambleWinAmountForLanded(
+  gambleAmount: number,
+  landedColor: WheelColor
+): number {
   const mult =
     landedColor === "green" ? WHEEL_PAYOUTS.green : WHEEL_PAYOUTS.red;
 
@@ -118,7 +182,10 @@ export function getWinLabel(
   initialGambleAmount: number,
   selectedColor: WheelChoice
 ): WinLabel {
-  if (initialGambleAmount > 0 && winAmount / initialGambleAmount >= MEGA_WIN_RATIO) {
+  if (
+    initialGambleAmount > 0 &&
+    winAmount / initialGambleAmount >= MEGA_WIN_RATIO
+  ) {
     return "MEGA WIN";
   }
   if (selectedColor === "green") return "EPIC WIN";

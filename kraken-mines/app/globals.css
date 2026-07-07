@@ -399,6 +399,77 @@ body {
   color: var(--text-primary);
 }
 
+/* ── Multiplier progression path ── */
+.multiplier-path-track {
+  min-height: 2.5rem;
+}
+
+.multiplier-path-step {
+  flex: 1 1 0;
+  min-width: 3.25rem;
+  max-width: 4.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.35rem 0.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(45, 65, 90, 0.55);
+  background: rgba(8, 14, 26, 0.65);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.multiplier-path-step-future {
+  opacity: 0.45;
+  border-color: rgba(45, 65, 90, 0.4);
+}
+
+.multiplier-path-step-completed {
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--gold-bright);
+}
+
+.multiplier-path-step-current {
+  border-color: rgba(212, 175, 55, 0.65);
+  background: linear-gradient(
+    180deg,
+    rgba(212, 175, 55, 0.22) 0%,
+    rgba(212, 175, 55, 0.1) 100%
+  );
+  box-shadow:
+    0 0 14px rgba(212, 175, 55, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  color: var(--gold-bright);
+  transform: scale(1.04);
+}
+
+.multiplier-path-value {
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.multiplier-path-check {
+  width: 0.65rem;
+  height: 0.65rem;
+  color: var(--gold-bright);
+}
+
+.multiplier-path-ellipsis {
+  display: flex;
+  align-items: center;
+  padding: 0 0.15rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  align-self: center;
+}
+
 /* ── Main action button (BET + CASH OUT) ── */
 .btn-action {
   background: linear-gradient(180deg, #e8c04a 0%, #d4af37 40%, #a8861e 100%);

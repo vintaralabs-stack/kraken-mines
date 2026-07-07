@@ -19,6 +19,7 @@ import {
   type WheelSegment,
   type WinLabel,
 } from "@/lib/wheelLogic";
+import { SOUND_EVENTS, type GameSoundApi } from "@/lib/sounds";
 import WheelDisc from "./WheelDisc";
 
 export interface GambleCollectPayload {
@@ -40,6 +41,7 @@ interface KrakenWheelProps {
   isOpen: boolean;
   entryCashoutAmount: number;
   betAmount: number;
+  sounds: GameSoundApi;
   onCollectNormal: () => void;
   onGambleCollect: (payload: GambleCollectPayload) => void;
   onGambleLoss: (payload: GambleLossPayload) => void;
@@ -48,10 +50,13 @@ interface KrakenWheelProps {
 
 type WheelView = "entry" | "wheel" | "spinning" | "win" | "loss";
 
+const MAX_GAMBLE_COUNT = 5;
+
 export default function KrakenWheel({
   isOpen,
   entryCashoutAmount,
   betAmount,
+  sounds,
   onCollectNormal,
   onGambleCollect,
   onGambleLoss,
@@ -68,6 +73,7 @@ export default function KrakenWheel({
   const [displayAmount, setDisplayAmount] = useState(0);
   const [countUpDone, setCountUpDone] = useState(false);
   const [countUpPulsing, setCountUpPulsing] = useState(false);
+  const [gambleCount, setGambleCount] = useState(0);
 
   const rotationRef = useRef(0);
   const finalSegmentRef = useRef<WheelSegment | null>(null);
@@ -85,7 +91,8 @@ export default function KrakenWheel({
       cancelAnimationFrame(countUpFrameRef.current);
       countUpFrameRef.current = null;
     }
-  }, []);
+    sounds.stopWheelTicks();
+  }, [sounds]);
 
   const resetState = useCallback(() => {
     clearTimers();
@@ -103,6 +110,7 @@ export default function KrakenWheel({
     setCountUpPulsing(false);
     lossHandledRef.current = false;
     finalSegmentRef.current = null;
+    setGambleCount(0);
   }, [clearTimers]);
 
   useEffect(() => {
@@ -155,11 +163,16 @@ export default function KrakenWheel({
   const handleEnterGamble = () => {
     setInitialGambleAmount(entryCashoutAmount);
     setCurrentGambleAmount(entryCashoutAmount);
+    setGambleCount(1);
     setView("wheel");
   };
 
   const handleChoice = (choice: WheelChoice) => {
     if (view !== "wheel") return;
+
+    sounds.unlock();
+    sounds.play(SOUND_EVENTS.WHEEL_SPIN_START);
+    sounds.startWheelTicks(WHEEL_SPIN_MS);
 
     // DEMO RNG — production replaces with backend-provided finalSegment
     // finalSegment is the single source of truth for visual landing and result logic.
@@ -186,6 +199,8 @@ export default function KrakenWheel({
       const seg = finalSegmentRef.current;
       if (!seg) return;
 
+      sounds.stopWheelTicks();
+
       const landed = seg.color;
       setLandedColor(landed);
 
@@ -197,6 +212,7 @@ export default function KrakenWheel({
       );
 
       if (!won) {
+        sounds.play(SOUND_EVENTS.WHEEL_GAMBLE_LOSS);
         setView("loss");
         lossHandledRef.current = false;
 
@@ -213,6 +229,12 @@ export default function KrakenWheel({
         return;
       }
 
+      sounds.play(
+        landed === "green"
+          ? SOUND_EVENTS.WHEEL_GREEN_JACKPOT
+          : SOUND_EVENTS.WHEEL_GAMBLE_WIN
+      );
+
       const label = getWinLabel(payout, initialGambleAmount, choice);
       setWinAmount(payout);
       setWinLabel(label);
@@ -222,7 +244,10 @@ export default function KrakenWheel({
   };
 
   const handleGambleAgain = () => {
+    if (gambleCount >= MAX_GAMBLE_COUNT) return;
+
     clearTimers();
+    setGambleCount((count) => count + 1);
     setCurrentGambleAmount(winAmount);
     setSelectedColor(null);
     setLandedColor(null);
@@ -424,13 +449,15 @@ export default function KrakenWheel({
                     ${formatCurrency(winAmount)}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  onClick={handleGambleAgain}
-                  className="btn-gamble w-full rounded-lg py-3 text-sm font-bold uppercase tracking-[0.2em]"
-                >
-                  Gamble Again
-                </button>
+                {gambleCount < MAX_GAMBLE_COUNT && (
+                  <button
+                    type="button"
+                    onClick={handleGambleAgain}
+                    className="btn-gamble w-full rounded-lg py-3 text-sm font-bold uppercase tracking-[0.2em]"
+                  >
+                    Gamble Again
+                  </button>
+                )}
               </div>
             )}
           </>
